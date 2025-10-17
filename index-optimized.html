@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Compras PWA</title>
+    <meta name="description" content="Una aplicación simple para gestionar tu lista de compras">
+    <meta name="theme-color" content="#6b5b3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Compras">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="192.png">
+    <link rel="apple-touch-icon" href="192.png">
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f5f5dc; }
+        .shopping-list { list-style: none; padding: 0; }
+        .item { display: flex; align-items: flex-start; padding: 0; border-bottom: 1px solid #d4c4a8; background: #fff8e7; margin-bottom: 5px; border-radius: 8px; flex-wrap: wrap; cursor: move; transition: all 0.3s ease; overflow: visible; position: relative; }
+        .item.has-image, .item:not(.has-image).menu-expanded { min-height: 120px; }
+        .item-content { display: flex; align-items: flex-start; padding: 10px; flex: 1; gap: 10px; flex-direction: column; }
+        .item:not(.has-image).menu-expanded .item-content { justify-content: center; min-height: 100px; }
+        .item-main-row { display: flex; align-items: flex-start; gap: 10px; width: 100%; }
+        .item:hover { background: #f5f0e8; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 100; }
+        .item:hover .inline-menu { z-index: 1000001; }
+        .item:hover .item-menu-container { z-index: 1000002; }
+        .item.dragging { opacity: 0.5; transform: rotate(2deg); }
+        .drag-handle { width: 24px; min-height: 40px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: grab; margin-right: 15px; color: #c0c0c0; transition: all 0.2s ease; user-select: none; background: #f8f8f8; border-right: 2px solid #e0e0e0; border-radius: 8px 0 0 8px; position: relative; align-self: stretch; }
+        .drag-handle.with-image, .item:not(.has-image).menu-expanded .drag-handle { min-height: 100px; }
+        .drag-handle:hover { color: #a0a0a0; background: #f0f0f0; border-right-color: #d0d0d0; }
+        .drag-handle:active { cursor: grabbing; background: #e8e8e8; }
+        .drag-handle::before { content: "⋮⋮"; font-size: 12px; line-height: 0.8; letter-spacing: -1px; }
+        .drag-handle::after { content: ""; position: absolute; right: -8px; top: 0; bottom: 0; width: 6px; background: linear-gradient(to right, #e0e0e0, transparent); border-radius: 0 3px 3px 0; }
+        .drop-zone { min-height: 20px; transition: all 0.2s ease; }
+        .drop-zone.drag-over { border-top: 3px solid #007bff; margin-top: 10px; background: rgba(0, 123, 255, 0.1); }
+        .completed .item-text { text-decoration: line-through !important; color: #dc3545 !important; }
+        .completed img, .completed button, .completed input { text-decoration: none !important; color: inherit !important; }
+        .add-item { margin-top: 20px; display: flex; gap: 10px; }
+        input[type="text"] { flex: 1; padding: 8px; border: 1px solid #d4c4a8; border-radius: 4px; background: #fff8e7; }
+        button { padding: 8px 16px; background: #d4c4a8; color: #4a4a4a; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.3s; }
+        button:hover { background: #c4b394; transform: translateY(-1px); }
+        .photo-btn { background: #a8d4a8 !important; }
+        .photo-btn:hover { background: #98c498 !important; }
+        .item-photo { width: 100px; height: 100px; object-fit: contain; border-radius: 8px; margin-right: 15px; border: 2px solid #d4c4a8; cursor: pointer; background: #fff8e7; }
+        .item span { margin: 0 15px; word-break: break-word; flex: 1; min-width: 0; max-width: calc(100% - 100px); }
+        .item button { margin-left: auto; margin-right: 0; padding: 6px 12px; white-space: nowrap; border-radius: 6px; transition: all 0.2s ease; }
+        .item-menu-container { position: relative; display: inline-block; z-index: 1000000; margin-left: auto; overflow: visible; }
+        .item-menu-btn { background: #e8e8f0; border: 1px solid #d0d0d8; font-size: 14px; padding: 6px 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s ease; color: #666; }
+        .item-menu-btn:hover { background: #d8d8e8; border-color: #b8b8c8; transform: translateY(-1px); }
+        .inline-menu { display: none; background: white; border-radius: 8px; padding: 8px; border: 1px solid #d0d0d8; box-shadow: 0 4px 12px rgba(0,0,0,0.15); position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 999999; animation: slideIn 0.2s ease; min-width: 160px; margin-right: 10px; margin-top: 5px; }
+        .inline-menu.show { display: block; }
+        .inline-menu-buttons { display: flex; flex-direction: column; gap: 4px; }
+        .inline-btn { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s ease; background: white; color: #555; width: 100%; text-align: left; }
+        .inline-btn:hover { background: #f8f8f8; transform: translateX(2px); }
+        .inline-btn.danger { color: #dc2626; }
+        .inline-btn.danger:hover { background: #fef2f2; color: #b91c1c; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-50%) translateX(10px); } to { opacity: 1; transform: translateY(-50%) translateX(0); } }
+        h1 { color: #6b5b3d; text-align: center; margin: 0; display: flex; align-items: center; justify-content: center; gap: 20px; }
+        .menu-container { position: relative; display: inline-block; z-index: 10000004; }
+        .menu-btn { background: none; border: none; font-size: 24px; cursor: pointer; padding: 8px; border-radius: 50%; transition: background-color 0.3s; color: #6b5b3d; position: relative; z-index: 10000005; }
+        .menu-btn:hover { background-color: rgba(107, 91, 61, 0.1); }
+        .dropdown-menu { position: absolute; top: 100%; right: 0; background: white; border: 1px solid #d4c4a8; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 10000003; min-width: 200px; display: none; margin-top: 10px; margin-right: 10px; }
+        .dropdown-menu.show { display: block; }
+        .dropdown-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; transition: all 0.2s ease; color: #666; font-size: 14px; }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: #f5f5f5; color: #333; }
+        .dropdown-item.danger { color: #e74c3c; font-size: 13px; }
+        .dropdown-item.danger:hover { background: #fdf2f2; color: #c0392b; }
+        .dropdown-item .icon { font-size: 14px; width: 16px; text-align: center; }
+        .edit-container { display: flex; align-items: center; gap: 5px; width: 100%; }
+        .edit-input { background: white; border: 2px solid #007bff; border-radius: 4px; padding: 4px 8px; font-size: 14px; flex: 1; min-width: 0; }
+        .edit-btn { width: 24px; height: 24px; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+        .save-btn { background: #28a745; color: white; }
+        .cancel-btn { background: #dc3545; color: white; }
+    </style>
+</head>
+<body>
+    <h1>Lista de Compras
+        <div class="menu-container">
+            <button class="menu-btn" onclick="toggleMenu()" title="Opciones">⋮</button>
+            <div class="dropdown-menu" id="dropdownMenu">
+                <div class="dropdown-item danger" onclick="clearAllItems()">
+                    <span class="icon">🗑</span> Limpiar lista
+                </div>
+            </div>
+        </div>
+    </h1>
+    <div class="add-item">
+        <input type="text" id="newItem" placeholder="Agregar producto...">
+        <input type="file" id="itemPhoto" accept="image/*" style="display: none;">
+        <button type="button" onclick="selectPhoto()" class="photo-btn" id="photoBtn">📷 Foto</button>
+        <button onclick="addItem()">Agregar</button>
+    </div>
+    <ul id="shoppingList" class="shopping-list"></ul>
+
+    <script>
+        let items = [], renderTimeout, draggedItem = null, draggedIndex = null;
+        
+        // Cargar datos con validación
+        try {
+            const stored = localStorage.getItem('shoppingList');
+            if (stored && (stored = JSON.parse(stored), Array.isArray(stored) && stored.every(item => 
+                typeof item === 'object' && typeof item.text === 'string' && typeof item.completed === 'boolean'))) {
+                items = stored;
+            }
+        } catch (e) { console.error('Error al cargar datos:', e); }
+
+        // Funciones de utilidad
+        const closeMenu = (index) => {
+            const menu = document.getElementById(`inlineMenu-${index}`);
+            const itemElement = menu?.closest('.item');
+            menu?.classList.remove('show');
+            itemElement && !itemElement.classList.contains('has-image') && itemElement.classList.remove('menu-expanded');
+        };
+
+        const validateFile = (file) => {
+            if (file.size > 5 * 1024 * 1024) return 'La imagen es demasiado grande. Máximo 5MB permitido.';
+            if (!file.type.startsWith('image/')) return 'Por favor selecciona un archivo de imagen válido.';
+            return null;
+        };
+
+        const saveData = () => localStorage.setItem('shoppingList', JSON.stringify(items));
+
+        // Renderizado optimizado
+        function renderList() {
+            if (renderTimeout) clearTimeout(renderTimeout);
+            renderTimeout = setTimeout(() => {
+                const list = document.getElementById('shoppingList');
+                list.innerHTML = '';
+                items.forEach((item, index) => {
+                    const li = document.createElement('li');
+                    li.className = `item ${item.completed ? 'completed' : ''} ${item.photo ? 'has-image' : ''}`;
+                    li.innerHTML = `
+                        <div class="drag-handle ${item.photo ? 'with-image' : ''}" draggable="true" onmousedown="startDrag(event, ${index})"></div>
+                        <div class="item-content">
+                            <div class="item-main-row">
+                                <input type="checkbox" ${item.completed ? 'checked' : ''} onchange="toggleItem(${index})">
+                                ${item.photo ? `<img src="${item.photo}" alt="Foto del producto" class="item-photo">` : ''}
+                                <span class="item-text" id="item-text-${index}">${item.text}</span>
+                                <div class="item-menu-container">
+                                    <button class="item-menu-btn" onclick="toggleInlineMenu(${index})" title="Más opciones">⋮</button>
+                                </div>
+                            </div>
+                            <div class="inline-menu" id="inlineMenu-${index}">
+                                <div class="inline-menu-buttons">
+                                    <button class="inline-btn" onclick="editItemName(${index})" title="Editar nombre">✏️ Editar nombre</button>
+                                    <button class="inline-btn" onclick="editPhoto(${index})" title="${item.photo ? 'Editar foto' : 'Agregar foto'}">📷 ${item.photo ? 'Editar foto' : 'Agregar foto'}</button>
+                                    <button class="inline-btn danger" onclick="deleteItem(${index})" title="Eliminar">🗑 Eliminar</button>
+                                </div>
+                            </div>
+                        </div>`;
+                    list.appendChild(li);
+                });
+                saveData();
+            }, 10);
+        }
+
+        // Funciones principales
+        function selectPhoto() {
+            const photoInput = document.getElementById('itemPhoto');
+            photoInput.click();
+            photoInput.onchange = updatePhotoButton;
+        }
+
+        function updatePhotoButton() {
+            const photoInput = document.getElementById('itemPhoto');
+            const photoBtn = document.getElementById('photoBtn');
+            if (photoInput.files?.[0]) {
+                photoBtn.innerHTML = '✓ Foto';
+                photoBtn.style.backgroundColor = '#28a745';
+                photoBtn.title = 'Foto seleccionada';
+            } else {
+                photoBtn.innerHTML = '📷 Foto';
+                photoBtn.style.backgroundColor = '#a8d4a8';
+                photoBtn.title = 'Seleccionar foto';
+            }
+        }
+
+        function addItem() {
+            const input = document.getElementById('newItem');
+            const photoInput = document.getElementById('itemPhoto');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const item = { text, completed: false, photo: null };
+            
+            if (photoInput.files?.[0]) {
+                const file = photoInput.files[0];
+                const error = validateFile(file);
+                if (error) { alert(error); return; }
+                
+                const reader = new FileReader();
+                reader.onload = e => {
+                    item.photo = e.target.result;
+                    items.push(item);
+                    input.value = '';
+                    photoInput.value = '';
+                    updatePhotoButton();
+                    renderList();
+                };
+                reader.readAsDataURL(file);
+            } else {
+                items.push(item);
+                input.value = '';
+                photoInput.value = '';
+                updatePhotoButton();
+                renderList();
+            }
+        }
+
+        function toggleItem(index) {
+            items[index].completed = !items[index].completed;
+            renderList();
+        }
+
+        function toggleInlineMenu(index) {
+            const menu = document.getElementById(`inlineMenu-${index}`);
+            const itemElement = menu.closest('.item');
+            
+            document.querySelectorAll('.inline-menu.show').forEach(otherMenu => {
+                if (otherMenu !== menu) {
+                    otherMenu.classList.remove('show');
+                    const otherItem = otherMenu.closest('.item');
+                    if (otherItem && !otherItem.classList.contains('has-image')) {
+                        otherItem.classList.remove('menu-expanded');
+                    }
+                }
+            });
+            
+            if (menu.classList.contains('show')) {
+                menu.classList.remove('show');
+                if (!itemElement.classList.contains('has-image')) {
+                    itemElement.classList.remove('menu-expanded');
+                }
+            } else {
+                itemElement.style.zIndex = '1000001';
+                itemElement.style.position = 'relative';
+                menu.style.zIndex = '1000002';
+                menu.classList.add('show');
+                if (!itemElement.classList.contains('has-image')) {
+                    itemElement.classList.add('menu-expanded');
+                }
+            }
+        }
+
+        function deleteItem(index) {
+            if (confirm('¿Estás seguro de que quieres eliminar este producto?')) {
+                items.splice(index, 1);
+                renderList();
+            } else {
+                closeMenu(index);
+            }
+        }
+
+        function toggleMenu() {
+            document.getElementById('dropdownMenu').classList.toggle('show');
+        }
+
+        function clearAllItems() {
+            if (items.length === 0) {
+                alert('La lista ya está vacía');
+                return;
+            }
+            if (confirm('¿Estás seguro de que quieres eliminar todos los productos de la lista?')) {
+                items = [];
+                renderList();
+                alert('Lista eliminada completamente');
+            }
+            document.getElementById('dropdownMenu').classList.remove('show');
+        }
+
+        function editItemName(index) {
+            closeMenu(index);
+            const itemTextElement = document.getElementById(`item-text-${index}`);
+            const currentText = items[index].text;
+            
+            const editContainer = document.createElement('div');
+            editContainer.className = 'edit-container';
+            editContainer.innerHTML = `
+                <input type="text" class="edit-input" value="${currentText}" maxlength="100">
+                <button class="edit-btn save-btn" onclick="saveItemName(${index})">✓</button>
+                <button class="edit-btn cancel-btn" onclick="cancelEditName(${index})">✗</button>
+            `;
+            
+            itemTextElement.innerHTML = '';
+            itemTextElement.appendChild(editContainer);
+            
+            const editInput = editContainer.querySelector('.edit-input');
+            editInput.focus();
+            editInput.select();
+            
+            editInput.addEventListener('keypress', e => {
+                if (e.key === 'Enter') saveItemName(index);
+                else if (e.key === 'Escape') cancelEditName(index);
+            });
+        }
+
+        function saveItemName(index) {
+            const itemTextElement = document.getElementById(`item-text-${index}`);
+            const editInput = itemTextElement.querySelector('.edit-input');
+            const newText = editInput.value.trim();
+            
+            if (newText && newText !== items[index].text) {
+                items[index].text = newText;
+                saveData();
+            }
+            
+            itemTextElement.textContent = items[index].text;
+            closeMenu(index);
+        }
+
+        function cancelEditName(index) {
+            const itemTextElement = document.getElementById(`item-text-${index}`);
+            itemTextElement.textContent = items[index].text;
+            closeMenu(index);
+        }
+
+        function editPhoto(index) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (file) {
+                    const error = validateFile(file);
+                    if (error) { alert(error); closeMenu(index); return; }
+                    
+                    const reader = new FileReader();
+                    reader.onload = event => {
+                        items[index].photo = event.target.result;
+                        renderList();
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    closeMenu(index);
+                }
+            };
+            input.click();
+        }
+
+        // Drag and Drop optimizado
+        function startDrag(event, index) {
+            draggedItem = event.target.closest('.item');
+            draggedIndex = index;
+            draggedItem.classList.add('dragging');
+            createDropZones();
+        }
+
+        function createDropZones() {
+            const list = document.getElementById('shoppingList');
+            const items = list.querySelectorAll('.item');
+            
+            document.querySelectorAll('.drop-zone').forEach(zone => zone.remove());
+            
+            items.forEach((item, index) => {
+                if (item.classList.contains('dragging')) return;
+                const dropZone = document.createElement('div');
+                dropZone.className = 'drop-zone';
+                dropZone.dataset.index = index;
+                ['dragover', 'dragleave', 'drop'].forEach(event => {
+                    dropZone.addEventListener(event, window[`handle${event.charAt(0).toUpperCase() + event.slice(1)}`]);
+                });
+                item.parentNode.insertBefore(dropZone, item);
+            });
+            
+            const finalDropZone = document.createElement('div');
+            finalDropZone.className = 'drop-zone';
+            finalDropZone.dataset.index = items.length;
+            ['dragover', 'dragleave', 'drop'].forEach(event => {
+                finalDropZone.addEventListener(event, window[`handle${event.charAt(0).toUpperCase() + event.slice(1)}`]);
+            });
+            list.appendChild(finalDropZone);
+        }
+
+        function handleDragover(event) { event.preventDefault(); event.target.classList.add('drag-over'); }
+        function handleDragleave(event) { event.target.classList.remove('drag-over'); }
+        
+        function handleDrop(event) {
+            event.preventDefault();
+            event.target.classList.remove('drag-over');
+            const dropIndex = parseInt(event.target.dataset.index);
+            if (draggedIndex !== null && dropIndex !== draggedIndex && dropIndex >= 0 && dropIndex <= items.length) {
+                moveItem(draggedIndex, dropIndex);
+            }
+            cleanupDrag();
+        }
+
+        function moveItem(fromIndex, toIndex) {
+            if (toIndex > fromIndex) toIndex--;
+            const item = items.splice(fromIndex, 1)[0];
+            items.splice(toIndex, 0, item);
+            saveData();
+            renderList();
+        }
+
+        function cleanupDrag() {
+            if (draggedItem) {
+                draggedItem.classList.remove('dragging');
+                draggedItem = null;
+                draggedIndex = null;
+            }
+            document.querySelectorAll('.drop-zone').forEach(zone => zone.remove());
+        }
+
+        // Event listeners optimizados
+        document.addEventListener('click', event => {
+            const menu = document.getElementById('dropdownMenu');
+            const menuBtn = document.querySelector('.menu-btn');
+            
+            if (!menu.contains(event.target) && !menuBtn.contains(event.target)) {
+                menu.classList.remove('show');
+            }
+            
+            document.querySelectorAll('.inline-menu').forEach(menu => {
+                if (!menu.contains(event.target)) {
+                    const menuBtn = document.querySelector(`[onclick="toggleInlineMenu(${menu.id.split('-')[1]})"]`);
+                    if (!menuBtn || !menuBtn.contains(event.target)) {
+                        menu.classList.remove('show');
+                        const itemElement = menu.closest('.item');
+                        if (itemElement && !itemElement.classList.contains('has-image')) {
+                            itemElement.classList.remove('menu-expanded');
+                        }
+                    }
+                }
+            });
+        });
+
+        document.addEventListener('mousemove', event => {
+            if (draggedItem && event.buttons === 1) { /* Mantener arrastre activo */ }
+        });
+
+        document.addEventListener('mouseup', event => {
+            if (draggedItem) cleanupDrag();
+        });
+
+        // Service Worker y estado offline
+        function updateOnlineStatus() {
+            console.log('Estado de conexión:', navigator.onLine ? 'online' : 'offline');
+            if (!navigator.onLine) showOfflineNotification();
+            else hideOfflineNotification();
+        }
+
+        function showOfflineNotification() {
+            let notification = document.getElementById('offline-notification');
+            if (!notification) {
+                notification = document.createElement('div');
+                notification.id = 'offline-notification';
+                notification.innerHTML = `
+                    <div style="position: fixed; top: 0; left: 0; right: 0; background: #ff6b6b; color: white; text-align: center; padding: 10px; z-index: 1000; font-weight: bold;">
+                        📱 Sin conexión - Trabajando en modo offline
+                    </div>`;
+                document.body.appendChild(notification);
+            }
+        }
+
+        function hideOfflineNotification() {
+            const notification = document.getElementById('offline-notification');
+            if (notification) notification.remove();
+        }
+
+        // Inicialización
+        renderList();
+        
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(registration => {
+                    console.log('Service Worker registrado:', registration);
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                if (confirm('Hay una nueva versión disponible. ¿Deseas actualizar?')) {
+                                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                    window.location.reload();
+                                }
+                            }
+                        });
+                    });
+                })
+                .catch(error => console.error('Error al registrar Service Worker:', error));
+            
+            navigator.serviceWorker.addEventListener('message', event => {
+                if (event.data.type === 'SW_UPDATED') console.log('Service Worker actualizado');
+            });
+        }
+
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        updateOnlineStatus();
+    </script>
+</body>
+</html>

@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Compras PWA</title>
+    <meta name="description" content="Una aplicación simple para gestionar tu lista de compras">
+    <meta name="theme-color" content="#6b5b3d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Compras">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="192.png">
+    <link rel="apple-touch-icon" href="192.png">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5dc; /* Beige claro para el fondo */
+        }
+        .shopping-list {
+            list-style: none;
+            padding: 0;
+        }
+        .item {
+            display: flex;
+            align-items: flex-start; /* Cambiado de center a flex-start */
+            padding: 0;
+            border-bottom: 1px solid #d4c4a8; /* Beige más oscuro para los bordes */
+            background-color: #fff8e7; /* Beige muy claro para los items */
+            margin-bottom: 5px;
+            border-radius: 8px;
+            flex-wrap: wrap; /* Permite que los elementos se envuelvan */
+            cursor: move; /* Cursor de arrastre para todo el item */
+            transition: all 0.3s ease;
+            overflow: visible; /* Cambiado de hidden a visible para que el dropdown se vea */
+            position: relative; /* Para el posicionamiento del dropdown */
+        }
+
+        /* Productos con imagen: altura fija */
+        .item.has-image {
+            min-height: 120px;
+        }
+
+        /* Productos sin imagen: se expanden solo cuando el menú está abierto */
+        .item:not(.has-image).menu-expanded {
+            min-height: 120px;
+        }
+
+
+        .item-content {
+            display: flex;
+            align-items: flex-start;
+            padding: 10px;
+            flex: 1;
+            gap: 10px;
+            flex-direction: column;
+        }
+
+        /* Para productos sin imagen, centrar el contenido verticalmente solo cuando está expandido */
+        .item:not(.has-image).menu-expanded .item-content {
+            justify-content: center;
+            min-height: 100px;
+        }
+
+        .item-main-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .item:hover {
+            background-color: #f5f0e8;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+
+        .item:hover .inline-menu {
+            z-index: 1000001;
+        }
+
+        .item:hover .item-menu-container {
+            z-index: 1000002;
+        }
+
+        .item.dragging {
+            opacity: 0.5;
+            transform: rotate(2deg);
+        }
+
+        .drag-handle {
+            width: 24px;
+            min-height: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: grab;
+            margin-right: 15px;
+            color: #c0c0c0;
+            transition: all 0.2s ease;
+            user-select: none;
+            background-color: #f8f8f8;
+            border-right: 2px solid #e0e0e0;
+            border-radius: 8px 0 0 8px;
+            position: relative;
+            align-self: stretch;
+        }
+
+        .drag-handle.with-image {
+            min-height: 100px;
+        }
+
+        /* Drag handle para productos sin imagen: misma altura que con imagen solo cuando está expandido */
+        .item:not(.has-image).menu-expanded .drag-handle {
+            min-height: 100px;
+        }
+
+        .drag-handle:hover {
+            color: #a0a0a0;
+            background-color: #f0f0f0;
+            border-right-color: #d0d0d0;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+            background-color: #e8e8e8;
+        }
+
+        .drag-handle::before {
+            content: "⋮⋮";
+            font-size: 12px;
+            line-height: 0.8;
+            letter-spacing: -1px;
+        }
+
+        .drag-handle::after {
+            content: "";
+            position: absolute;
+            right: -8px;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            background: linear-gradient(to right, #e0e0e0, transparent);
+            border-radius: 0 3px 3px 0;
+        }
+
+        .drop-zone {
+            min-height: 20px;
+            transition: all 0.2s ease;
+        }
+
+        .drop-zone.drag-over {
+            border-top: 3px solid #007bff;
+            margin-top: 10px;
+            background-color: rgba(0, 123, 255, 0.1);
+        }
+        .completed .item-text {
+            text-decoration: line-through !important;
+            color: #dc3545 !important; /* Rojo para items completados */
+        }
+        
+        /* Asegurar que otros elementos no se vean afectados */
+        .completed img,
+        .completed button,
+        .completed input {
+            text-decoration: none !important;
+            color: inherit !important;
+        }
+        .add-item {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #d4c4a8;
+            border-radius: 4px;
+            background-color: #fff8e7;
+        }
+        button {
+            padding: 8px 16px;
+            background: #d4c4a8; /* Beige medio para los botones */
+            color: #4a4a4a;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background: #c4b394; /* Beige más oscuro al hover */
+        }
+        .photo-btn {
+            background: #a8d4a8 !important; /* Verde claro para el botón de foto */
+        }
+        .photo-btn:hover {
+            background: #98c498 !important; /* Verde más oscuro al hover */
+        }
+        .item-photo {
+            width: 100px;
+            height: 100px;
+            object-fit: contain;
+            border-radius: 8px;
+            margin-right: 15px;
+            border: 2px solid #d4c4a8;
+            cursor: pointer;
+            background-color: #fff8e7;
+        }
+        .edit-photo-btn {
+            background: #e8e8f0 !important; /* Gris muy claro para un look minimalista */
+            border: 1px solid #d0d0d8 !important;
+            font-size: 13px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            margin-right: 4px;
+        }
+        .edit-photo-btn:hover {
+            background: #d8d8e8 !important; /* Gris un poco más oscuro al hover */
+            border-color: #b8b8c8 !important;
+            transform: translateY(-1px);
+        }
+        .item span {
+            margin: 0 15px;
+            word-break: break-word; /* Permite romper palabras largas */
+            flex: 1; /* Toma el espacio disponible */
+            min-width: 0; /* Permite que el texto se ajuste */
+            max-width: calc(100% - 100px); /* Deja espacio para el checkbox y el botón */
+        }
+        .item button {
+            margin-left: auto;
+            margin-right: 0;
+            padding: 6px 12px;
+            white-space: nowrap; /* Evita que el texto del botón se rompa */
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .item button:hover {
+            transform: translateY(-1px);
+        }
+
+        .item .edit-buttons-group {
+            display: flex;
+            gap: 2px;
+            margin-right: 8px;
+        }
+
+        .item-menu-container {
+            position: relative;
+            display: inline-block;
+            z-index: 1000000;
+            margin-left: auto;
+            overflow: visible;
+        }
+
+        .item-menu-btn {
+            background: #e8e8f0;
+            border: 1px solid #d0d0d8;
+            font-size: 14px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #666;
+        }
+
+        .item-menu-btn:hover {
+            background: #d8d8e8;
+            border-color: #b8b8c8;
+            transform: translateY(-1px);
+        }
+
+        .inline-menu {
+            display: none;
+            background: white;
+            border-radius: 8px;
+            padding: 8px;
+            border: 1px solid #d0d0d8;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 999999;
+            animation: slideIn 0.2s ease;
+            min-width: 160px;
+            margin-right: 10px;
+            margin-top: 5px;
+        }
+
+        .inline-menu.show {
+            display: block;
+        }
+
+        .inline-menu-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .inline-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s ease;
+            background: white;
+            color: #555;
+            width: 100%;
+            text-align: left;
+        }
+
+        .inline-btn:hover {
+            background: #f8f8f8;
+            transform: translateX(2px);
+        }
+
+        .inline-btn.danger {
+            color: #dc2626;
+        }
+
+        .inline-btn.danger:hover {
+            background: #fef2f2;
+            color: #b91c1c;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50%) translateX(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(-50%) translateX(0);
+            }
+        }
+
+        @keyframes slideInInternal {
+            from {
+                opacity: 0;
+                max-height: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                max-height: 200px;
+                transform: translateY(0);
+            }
+        }
+
+        h1 {
+            color: #6b5b3d; /* Marrón beige para el título */
+            text-align: center;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .menu-container {
+            position: relative;
+            display: inline-block;
+            z-index: 10000004;
+        }
+
+        .menu-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.3s;
+            color: #6b5b3d;
+            position: relative;
+            z-index: 10000005;
+        }
+
+        .menu-btn:hover {
+            background-color: rgba(107, 91, 61, 0.1);
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: white;
+            border: 1px solid #d4c4a8;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 10000003;
+            min-width: 200px;
+            display: none;
+            margin-top: 10px;
+            margin-right: 10px;
+        }
+
+        .dropdown-menu.show {
+            display: block;
+        }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: all 0.2s ease;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .dropdown-item:hover {
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .dropdown-item.danger {
+            color: #e74c3c;
+            font-size: 13px;
+        }
+
+        .dropdown-item.danger:hover {
+            background-color: #fdf2f2;
+            color: #c0392b;
+        }
+
+        .dropdown-item .icon {
+            font-size: 14px;
+            width: 16px;
+            text-align: center;
+        }
+
+        .edit-container {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            width: 100%;
+        }
+
+        .edit-input {
+            background: white;
+            border: 2px solid #007bff;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 14px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .edit-btn {
+            width: 24px;
+            height: 24px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .save-btn {
+            background: #28a745;
+            color: white;
+        }
+
+        .cancel-btn {
+            background: #dc3545;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <h1>
+        Lista de Compras
+        <div class="menu-container">
+            <button class="menu-btn" onclick="toggleMenu()" title="Opciones">⋮</button>
+            <div class="dropdown-menu" id="dropdownMenu">
+                <div class="dropdown-item danger" onclick="clearAllItems()">
+                    <span class="icon">🗑</span>
+                    Limpiar lista
+                </div>
+            </div>
+        </div>
+    </h1>
+    <div class="add-item">
+        <input type="text" id="newItem" placeholder="Agregar producto...">
+        <input type="file" id="itemPhoto" accept="image/*" style="display: none;">
+        <button type="button" onclick="selectPhoto()" class="photo-btn" id="photoBtn">📷 Foto</button>
+        <button onclick="addItem()">Agregar</button>
+    </div>
+    <ul id="shoppingList" class="shopping-list"></ul>
+
+    <script>
+        // Cargar items con validación de datos
+        let items = [];
+        try {
+            const stored = localStorage.getItem('shoppingList');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                // Validar que sea un array y tenga la estructura correcta
+                if (Array.isArray(parsed) && parsed.every(item => 
+                    typeof item === 'object' && 
+                    typeof item.text === 'string' && 
+                    typeof item.completed === 'boolean'
+                )) {
+                    items = parsed;
+                }
+            }
+        } catch (error) {
+            console.error('Error al cargar datos del localStorage:', error);
+            items = [];
+        }
+
+        // Debounce para evitar múltiples renders
+        let renderTimeout;
+        
+        function renderList() {
+            if (renderTimeout) {
+                clearTimeout(renderTimeout);
+            }
+            
+            renderTimeout = setTimeout(() => {
+                const list = document.getElementById('shoppingList');
+                list.innerHTML = '';
+                items.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.className = `item ${item.completed ? 'completed' : ''} ${item.photo ? 'has-image' : ''}`;
+                
+                // Crear la imagen si existe
+                const photoHtml = item.photo ? `<img src="${item.photo}" alt="Foto del producto" class="item-photo">` : '';
+                
+                li.innerHTML = `
+                    <div class="drag-handle ${item.photo ? 'with-image' : ''}" draggable="true" onmousedown="startDrag(event, ${index})"></div>
+                    <div class="item-content">
+                        <div class="item-main-row">
+                            <input type="checkbox" ${item.completed ? 'checked' : ''} 
+                                   onchange="toggleItem(${index})">
+                            ${photoHtml}
+                            <span class="item-text" id="item-text-${index}">${item.text}</span>
+                            <div class="item-menu-container">
+                                <button class="item-menu-btn" onclick="toggleInlineMenu(${index})" title="Más opciones">⋮</button>
+                            </div>
+                        </div>
+                        <div class="inline-menu" id="inlineMenu-${index}">
+                            <div class="inline-menu-buttons">
+                                <button class="inline-btn" onclick="editItemName(${index})" title="Editar nombre">
+                                    ✏️ Editar nombre
+                                </button>
+                                ${item.photo ? 
+                                    `<button class="inline-btn" onclick="editPhoto(${index})" title="Editar foto">
+                                        📷 Editar foto
+                                    </button>` : 
+                                    `<button class="inline-btn" onclick="editPhoto(${index})" title="Agregar foto">
+                                        📷 Agregar foto
+                                    </button>`
+                                }
+                                <button class="inline-btn danger" onclick="deleteItem(${index})" title="Eliminar">
+                                    🗑 Eliminar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                list.appendChild(li);
+            });
+            localStorage.setItem('shoppingList', JSON.stringify(items));
+            }, 10); // 10ms debounce
+        }
+
+        function selectPhoto() {
+            const photoInput = document.getElementById('itemPhoto');
+            photoInput.click();
+            
+            // Escuchar cuando se selecciona un archivo
+            photoInput.onchange = function() {
+                updatePhotoButton();
+            };
+        }
+        
+        function updatePhotoButton() {
+            const photoInput = document.getElementById('itemPhoto');
+            const photoBtn = document.getElementById('photoBtn');
+            
+            if (photoInput.files && photoInput.files[0]) {
+                // Foto seleccionada - cambiar a tick verde
+                photoBtn.innerHTML = '✓ Foto';
+                photoBtn.style.backgroundColor = '#28a745';
+                photoBtn.title = 'Foto seleccionada';
+            } else {
+                // No hay foto - volver a cámara
+                photoBtn.innerHTML = '📷 Foto';
+                photoBtn.style.backgroundColor = '#a8d4a8';
+                photoBtn.title = 'Seleccionar foto';
+            }
+        }
+
+        function addItem() {
+            const input = document.getElementById('newItem');
+            const photoInput = document.getElementById('itemPhoto');
+            const text = input.value.trim();
+            
+            if (text) {
+                const item = { text, completed: false, photo: null };
+                
+                // Si hay una foto seleccionada, convertirla a base64
+                if (photoInput.files && photoInput.files[0]) {
+                    const file = photoInput.files[0];
+                    
+                    // Validar tamaño del archivo (máximo 5MB)
+                    if (file.size > 5 * 1024 * 1024) {
+                        alert('La imagen es demasiado grande. Máximo 5MB permitido.');
+                        return;
+                    }
+                    
+                    // Validar tipo de archivo
+                    if (!file.type.startsWith('image/')) {
+                        alert('Por favor selecciona un archivo de imagen válido.');
+                        return;
+                    }
+                    
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(e) {
+                        item.photo = e.target.result;
+                        items.push(item);
+                        input.value = '';
+                        photoInput.value = '';
+                        updatePhotoButton(); // Resetear botón
+                        renderList();
+                    };
+                    
+                    reader.readAsDataURL(file);
+                } else {
+                    // Si no hay foto, agregar el item directamente
+                    items.push(item);
+                    input.value = '';
+                    photoInput.value = '';
+                    updatePhotoButton(); // Resetear botón
+                    renderList();
+                }
+            }
+        }
+
+        function toggleItem(index) {
+            items[index].completed = !items[index].completed;
+            renderList();
+        }
+
+        // Función para mostrar/ocultar el menú inline de un producto específico
+        function toggleInlineMenu(index) {
+            const menu = document.getElementById(`inlineMenu-${index}`);
+            const menuBtn = document.querySelector(`[onclick="toggleInlineMenu(${index})"]`);
+            const itemElement = menuBtn.closest('.item');
+            
+            // Cerrar otros menús abiertos y remover clases de expansión
+            document.querySelectorAll('.inline-menu.show').forEach(otherMenu => {
+                if (otherMenu !== menu) {
+                    otherMenu.classList.remove('show');
+                    const otherItem = otherMenu.closest('.item');
+                    if (otherItem && !otherItem.classList.contains('has-image')) {
+                        otherItem.classList.remove('menu-expanded');
+                    }
+                }
+            });
+            
+            if (menu.classList.contains('show')) {
+                menu.classList.remove('show');
+                // Remover clase de expansión para productos sin imagen
+                if (!itemElement.classList.contains('has-image')) {
+                    itemElement.classList.remove('menu-expanded');
+                }
+            } else {
+                // Asegurar que el contenedor tenga el z-index más alto
+                itemElement.style.zIndex = '1000001';
+                itemElement.style.position = 'relative';
+                menu.style.zIndex = '1000002';
+                menuBtn.style.zIndex = '1000003';
+                menu.classList.add('show');
+                
+                // Agregar clase de expansión para productos sin imagen
+                if (!itemElement.classList.contains('has-image')) {
+                    itemElement.classList.add('menu-expanded');
+                }
+            }
+        }
+
+        function deleteItem(index) {
+            if (confirm('¿Estás seguro de que quieres eliminar este producto?')) {
+                items.splice(index, 1);
+                renderList();
+            } else {
+                // Cerrar el menú después de cancelar y remover expansión
+                const menu = document.getElementById(`inlineMenu-${index}`);
+                const itemElement = menu.closest('.item');
+                menu.classList.remove('show');
+                if (itemElement && !itemElement.classList.contains('has-image')) {
+                    itemElement.classList.remove('menu-expanded');
+                }
+            }
+        }
+
+        // Función para mostrar/ocultar el menú desplegable
+        function toggleMenu() {
+            const menu = document.getElementById('dropdownMenu');
+            menu.classList.toggle('show');
+        }
+
+        // Cerrar los menús al hacer clic fuera de ellos
+        document.addEventListener('click', function(event) {
+            // Cerrar menú principal
+            const menu = document.getElementById('dropdownMenu');
+            const menuBtn = document.querySelector('.menu-btn');
+            
+            if (!menu.contains(event.target) && !menuBtn.contains(event.target)) {
+                menu.classList.remove('show');
+            }
+            
+            // Cerrar todos los menús inline de productos
+            const inlineMenus = document.querySelectorAll('.inline-menu');
+            inlineMenus.forEach(menu => {
+                if (!menu.contains(event.target)) {
+                    // Verificar si el click fue en el botón correspondiente
+                    const menuBtn = document.querySelector(`[onclick="toggleInlineMenu(${menu.id.split('-')[1]})"]`);
+                    if (!menuBtn || !menuBtn.contains(event.target)) {
+                        menu.classList.remove('show');
+                        // Remover clase de expansión para productos sin imagen
+                        const itemElement = menu.closest('.item');
+                        if (itemElement && !itemElement.classList.contains('has-image')) {
+                            itemElement.classList.remove('menu-expanded');
+                        }
+                    }
+                }
+            });
+        });
+
+        // Función para eliminar toda la lista
+        function clearAllItems() {
+            if (items.length === 0) {
+                alert('La lista ya está vacía');
+                return;
+            }
+            
+            if (confirm('¿Estás seguro de que quieres eliminar todos los productos de la lista?')) {
+                items = [];
+                renderList();
+                alert('Lista eliminada completamente');
+            }
+            
+            // Cerrar el menú después de la acción
+            document.getElementById('dropdownMenu').classList.remove('show');
+        }
+
+        // Función para editar el nombre de un producto
+        function editItemName(index) {
+            // Cerrar el menú automáticamente al iniciar la edición
+            const menu = document.getElementById(`inlineMenu-${index}`);
+            const itemElement = menu.closest('.item');
+            menu.classList.remove('show');
+            if (itemElement && !itemElement.classList.contains('has-image')) {
+                itemElement.classList.remove('menu-expanded');
+            }
+            
+            const itemTextElement = document.getElementById(`item-text-${index}`);
+            const currentText = items[index].text;
+            
+            // Crear contenedor para la edición
+            const editContainer = document.createElement('div');
+            editContainer.className = 'edit-container';
+            
+            // Crear input de edición
+            const editInput = document.createElement('input');
+            editInput.type = 'text';
+            editInput.value = currentText;
+            editInput.className = 'edit-input';
+            editInput.maxLength = 100;
+            
+            // Crear botón de guardar (tick verde)
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'edit-btn save-btn';
+            saveBtn.innerHTML = '✓';
+            saveBtn.onclick = () => saveItemName(index);
+            
+            // Crear botón de cancelar (X roja)
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'edit-btn cancel-btn';
+            cancelBtn.innerHTML = '✗';
+            cancelBtn.onclick = () => cancelEditName(index);
+            
+            // Agregar elementos al contenedor
+            editContainer.appendChild(editInput);
+            editContainer.appendChild(saveBtn);
+            editContainer.appendChild(cancelBtn);
+            
+            // Reemplazar el texto con el contenedor de edición
+            itemTextElement.innerHTML = '';
+            itemTextElement.appendChild(editContainer);
+            
+            // Seleccionar el texto y enfocar el input
+            editInput.focus();
+            editInput.select();
+            
+            // Guardar al presionar Enter
+            editInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    saveItemName(index);
+                } else if (e.key === 'Escape') {
+                    cancelEditName(index);
+                }
+            });
+        }
+
+        // Función para guardar el nombre editado
+        function saveItemName(index) {
+            const itemTextElement = document.getElementById(`item-text-${index}`);
+            const editInput = itemTextElement.querySelector('.edit-input');
+            const newText = editInput.value.trim();
+            
+            if (newText && newText !== items[index].text) {
+                items[index].text = newText;
+                localStorage.setItem('shoppingList', JSON.stringify(items));
+            }
+            
+            // Restaurar el texto normal
+            itemTextElement.textContent = items[index].text;
+            
+            // Cerrar el menú y remover expansión
+            const menu = document.getElementById(`inlineMenu-${index}`);
+            const itemElement = menu.closest('.item');
+            menu.classList.remove('show');
+            if (itemElement && !itemElement.classList.contains('has-image')) {
+                itemElement.classList.remove('menu-expanded');
+            }
+        }
+
+        // Función para cancelar la edición
+        function cancelEditName(index) {
+            const itemTextElement = document.getElementById(`item-text-${index}`);
+            itemTextElement.textContent = items[index].text;
+            
+            // Cerrar el menú y remover expansión
+            const menu = document.getElementById(`inlineMenu-${index}`);
+            const itemElement = menu.closest('.item');
+            menu.classList.remove('show');
+            if (itemElement && !itemElement.classList.contains('has-image')) {
+                itemElement.classList.remove('menu-expanded');
+            }
+        }
+
+        function editPhoto(index) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    // Validar tamaño del archivo (máximo 5MB)
+                    if (file.size > 5 * 1024 * 1024) {
+                        alert('La imagen es demasiado grande. Máximo 5MB permitido.');
+                        // Cerrar menú y remover expansión
+                        const menu = document.getElementById(`inlineMenu-${index}`);
+                        const itemElement = menu.closest('.item');
+                        menu.classList.remove('show');
+                        if (itemElement && !itemElement.classList.contains('has-image')) {
+                            itemElement.classList.remove('menu-expanded');
+                        }
+                        return;
+                    }
+                    
+                    // Validar tipo de archivo
+                    if (!file.type.startsWith('image/')) {
+                        alert('Por favor selecciona un archivo de imagen válido.');
+                        // Cerrar menú y remover expansión
+                        const menu = document.getElementById(`inlineMenu-${index}`);
+                        const itemElement = menu.closest('.item');
+                        menu.classList.remove('show');
+                        if (itemElement && !itemElement.classList.contains('has-image')) {
+                            itemElement.classList.remove('menu-expanded');
+                        }
+                        return;
+                    }
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        items[index].photo = event.target.result;
+                        renderList();
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    // Si no se seleccionó archivo, cerrar menú y remover expansión
+                    const menu = document.getElementById(`inlineMenu-${index}`);
+                    const itemElement = menu.closest('.item');
+                    menu.classList.remove('show');
+                    if (itemElement && !itemElement.classList.contains('has-image')) {
+                        itemElement.classList.remove('menu-expanded');
+                    }
+                }
+            };
+            
+            input.click();
+        }
+
+        // Variables para drag and drop
+        let draggedItem = null;
+        let draggedIndex = null;
+
+        // Funciones para drag and drop
+        function startDrag(event, index) {
+            draggedItem = event.target.closest('.item');
+            draggedIndex = index;
+            draggedItem.classList.add('dragging');
+            
+            // Crear drop zones
+            createDropZones();
+        }
+
+        function createDropZones() {
+            const list = document.getElementById('shoppingList');
+            const items = list.querySelectorAll('.item');
+            
+            // Limpiar drop zones existentes
+            document.querySelectorAll('.drop-zone').forEach(zone => zone.remove());
+            
+            items.forEach((item, index) => {
+                if (item.classList.contains('dragging')) return;
+                
+                const dropZone = document.createElement('div');
+                dropZone.className = 'drop-zone';
+                dropZone.dataset.index = index;
+                
+                dropZone.addEventListener('dragover', handleDragOver);
+                dropZone.addEventListener('dragleave', handleDragLeave);
+                dropZone.addEventListener('drop', handleDrop);
+                
+                item.parentNode.insertBefore(dropZone, item);
+            });
+            
+            // Agregar drop zone al final
+            const finalDropZone = document.createElement('div');
+            finalDropZone.className = 'drop-zone';
+            finalDropZone.dataset.index = items.length;
+            finalDropZone.addEventListener('dragover', handleDragOver);
+            finalDropZone.addEventListener('dragleave', handleDragLeave);
+            finalDropZone.addEventListener('drop', handleDrop);
+            list.appendChild(finalDropZone);
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault();
+            event.target.classList.add('drag-over');
+        }
+
+        function handleDragLeave(event) {
+            event.target.classList.remove('drag-over');
+        }
+
+        function handleDrop(event) {
+            event.preventDefault();
+            event.target.classList.remove('drag-over');
+            
+            const dropIndex = parseInt(event.target.dataset.index);
+            if (draggedIndex !== null && dropIndex !== draggedIndex && 
+                dropIndex >= 0 && dropIndex <= items.length) {
+                moveItem(draggedIndex, dropIndex);
+            }
+            
+            cleanupDrag();
+        }
+
+        function moveItem(fromIndex, toIndex) {
+            // Ajustar el índice si estamos moviendo hacia abajo
+            if (toIndex > fromIndex) {
+                toIndex--;
+            }
+            
+            // Mover el elemento en el array
+            const item = items.splice(fromIndex, 1)[0];
+            items.splice(toIndex, 0, item);
+            
+            // Guardar y renderizar
+            localStorage.setItem('shoppingList', JSON.stringify(items));
+            renderList();
+        }
+
+        function cleanupDrag() {
+            if (draggedItem) {
+                draggedItem.classList.remove('dragging');
+                draggedItem = null;
+                draggedIndex = null;
+            }
+            
+            // Limpiar drop zones
+            document.querySelectorAll('.drop-zone').forEach(zone => zone.remove());
+        }
+
+        // Agregar event listeners para drag and drop
+        document.addEventListener('mousemove', function(event) {
+            if (draggedItem && event.buttons === 1) {
+                // Mantener el arrastre activo
+            }
+        });
+
+        document.addEventListener('mouseup', function(event) {
+            if (draggedItem) {
+                cleanupDrag();
+            }
+        });
+
+        // Cargar lista al iniciar
+        renderList();
+
+        // Registrar Service Worker con manejo mejorado
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(registration => {
+                    console.log('Service Worker registrado exitosamente:', registration);
+                    
+                    // Verificar actualizaciones
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                // Nueva versión disponible
+                                if (confirm('Hay una nueva versión disponible. ¿Deseas actualizar?')) {
+                                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                    window.location.reload();
+                                }
+                            }
+                        });
+                    });
+                })
+                .catch(error => {
+                    console.error('Error al registrar Service Worker:', error);
+                });
+            
+            // Escuchar mensajes del service worker
+            navigator.serviceWorker.addEventListener('message', event => {
+                if (event.data.type === 'SW_UPDATED') {
+                    console.log('Service Worker actualizado');
+                }
+            });
+        }
+
+        // Detectar estado de conexión
+        function updateOnlineStatus() {
+            const status = navigator.onLine ? 'online' : 'offline';
+            console.log('Estado de conexión:', status);
+            
+            // Mostrar notificación visual del estado offline
+            if (!navigator.onLine) {
+                showOfflineNotification();
+            } else {
+                hideOfflineNotification();
+            }
+        }
+
+        function showOfflineNotification() {
+            let notification = document.getElementById('offline-notification');
+            if (!notification) {
+                notification = document.createElement('div');
+                notification.id = 'offline-notification';
+                notification.innerHTML = `
+                    <div style="
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        background-color: #ff6b6b;
+                        color: white;
+                        text-align: center;
+                        padding: 10px;
+                        z-index: 1000;
+                        font-weight: bold;
+                    ">
+                        📱 Sin conexión - Trabajando en modo offline
+                    </div>
+                `;
+                document.body.appendChild(notification);
+            }
+        }
+
+        function hideOfflineNotification() {
+            const notification = document.getElementById('offline-notification');
+            if (notification) {
+                notification.remove();
+            }
+        }
+
+        // Escuchar cambios en el estado de conexión
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        
+        // Verificar estado inicial
+        updateOnlineStatus();
+    </script>
+</body>
+</html>

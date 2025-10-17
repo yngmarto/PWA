@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <!-- Meta tags básicos para la PWA -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Compras PWA</title>
+    <meta name="description" content="Una aplicación simple para gestionar tu lista de compras">
+    <meta name="theme-color" content="#6b5b3d">
+    
+    <!-- Meta tags específicos para iOS/Safari -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Compras">
+    
+    <!-- Enlaces a archivos de la PWA -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="192.png">
+    <link rel="apple-touch-icon" href="192.png">
+    
+    <style>
+        /* Reset básico para todos los elementos */
+        * { box-sizing: border-box; }
+        
+        /* Estilos del cuerpo principal de la aplicación */
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            background: #f5f5dc; /* Fondo beige claro */
+        }
+        
+        /* Contenedor principal de la lista */
+        .shopping-list { 
+            list-style: none; 
+            padding: 0; 
+        }
+        
+        /* Estilos para cada item de la lista */
+        .item { 
+            display: flex; 
+            align-items: flex-start; 
+            padding: 0; 
+            border-bottom: 1px solid #d4c4a8; 
+            background: #fff8e7; 
+            margin-bottom: 5px; 
+            border-radius: 8px; 
+            flex-wrap: wrap; 
+            cursor: move; /* Cursor para indicar que se puede arrastrar */
+            transition: all 0.3s ease; 
+            overflow: visible; 
+            position: relative; 
+        }
+        
+        /* Items con imagen: altura fija para mantener consistencia */
+        .item.has-image, .item:not(.has-image).menu-expanded { 
+            min-height: 120px; 
+        }
+        
+        /* Contenedor del contenido de cada item */
+        .item-content { 
+            display: flex; 
+            align-items: flex-start; 
+            padding: 10px; 
+            flex: 1; 
+            gap: 10px; 
+            flex-direction: column; 
+        }
+        
+        /* Centrar contenido verticalmente cuando el menú está expandido */
+        .item:not(.has-image).menu-expanded .item-content { 
+            justify-content: center; 
+            min-height: 100px; 
+        }
+        
+        /* Fila principal de cada item (checkbox, texto, menú) */
+        .item-main-row { 
+            display: flex; 
+            align-items: flex-start; 
+            gap: 10px; 
+            width: 100%; 
+        }
+        
+        /* Efectos hover para los items */
+        .item:hover { 
+            background: #f5f0e8; 
+            transform: translateY(-1px); 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
+            z-index: 100; 
+        }
+        
+        /* Asegurar que los menús se vean por encima de otros elementos */
+        .item:hover .inline-menu { 
+            z-index: 1000001; 
+        }
+        .item:hover .item-menu-container { 
+            z-index: 1000002; 
+        }
+        
+        /* Estado visual cuando se está arrastrando un item */
+        .item.dragging { 
+            opacity: 0.5; 
+            transform: rotate(2deg); 
+        }
+        
+        /* Handle para arrastrar items */
+        .drag-handle { 
+            width: 24px; 
+            min-height: 40px; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            cursor: grab; 
+            margin-right: 15px; 
+            color: #c0c0c0; 
+            transition: all 0.2s ease; 
+            user-select: none; 
+            background: #f8f8f8; 
+            border-right: 2px solid #e0e0e0; 
+            border-radius: 8px 0 0 8px; 
+            position: relative; 
+            align-self: stretch; 
+        }
+        
+        /* Altura específica para items con imagen */
+        .drag-handle.with-image, .item:not(.has-image).menu-expanded .drag-handle { 
+            min-height: 100px; 
+        }
+        
+        /* Efectos hover para el handle de arrastre */
+        .drag-handle:hover { 
+            color: #a0a0a0; 
+            background: #f0f0f0; 
+            border-right-color: #d0d0d0; 
+        }
+        .drag-handle:active { 
+            cursor: grabbing; 
+            background: #e8e8e8; 
+        }
+        
+        /* Icono visual del handle (puntos verticales) */
+        .drag-handle::before { 
+            content: "⋮⋮"; 
+            font-size: 12px; 
+            line-height: 0.8; 
+            letter-spacing: -1px; 
+        }
+        
+        /* Efecto visual de sombra en el handle */
+        .drag-handle::after { 
+            content: ""; 
+            position: absolute; 
+            right: -8px; 
+            top: 0; 
+            bottom: 0; 
+            width: 6px; 
+            background: linear-gradient(to right, #e0e0e0, transparent); 
+            border-radius: 0 3px 3px 0; 
+        }
+        
+        /* Zonas de drop para el drag & drop */
+        .drop-zone { 
+            min-height: 20px; 
+            transition: all 0.2s ease; 
+        }
+        
+        /* Estado visual cuando se arrastra sobre una zona de drop */
+        .drop-zone.drag-over { 
+            border-top: 3px solid #007bff; 
+            margin-top: 10px; 
+            background: rgba(0, 123, 255, 0.1); 
+        }
+        
+        /* Estilos para items completados */
+        .completed .item-text { 
+            text-decoration: line-through !important; 
+            color: #dc3545 !important; 
+        }
+        
+        /* Asegurar que otros elementos no se vean afectados por el tachado */
+        .completed img, .completed button, .completed input { 
+            text-decoration: none !important; 
+            color: inherit !important; 
+        }
+        
+        /* Contenedor para agregar nuevos items */
+        .add-item { 
+            margin-top: 20px; 
+            display: flex; 
+            gap: 10px; 
+        }
+        
+        /* Estilos para inputs de texto */
+        input[type="text"] { 
+            flex: 1; 
+            padding: 8px; 
+            border: 1px solid #d4c4a8; 
+            border-radius: 4px; 
+            background: #fff8e7; 
+        }
+        
+        /* Estilos base para todos los botones */
+        button { 
+            padding: 8px 16px; 
+            background: #d4c4a8; 
+            color: #4a4a4a; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            transition: background-color 0.3s; 
+        }
+        
+        /* Efecto hover para botones */
+        button:hover { 
+            background: #c4b394; 
+            transform: translateY(-1px); 
+        }
+        
+        /* Estilos específicos para el botón de foto */
+        .photo-btn { 
+            background: #a8d4a8 !important; 
+        }
+        .photo-btn:hover { 
+            background: #98c498 !important; 
+        }
+        
+        /* Estilos para las fotos de los productos */
+        .item-photo { 
+            width: 100px; 
+            height: 100px; 
+            object-fit: contain; 
+            border-radius: 8px; 
+            margin-right: 15px; 
+            border: 2px solid #d4c4a8; 
+            cursor: pointer; 
+            background: #fff8e7; 
+        }
+        
+        /* Estilos para el texto de los items */
+        .item span { 
+            margin: 0 15px; 
+            word-break: break-word; 
+            flex: 1; 
+            min-width: 0; 
+            max-width: calc(100% - 100px); 
+        }
+        
+        /* Estilos para botones dentro de items */
+        .item button { 
+            margin-left: auto; 
+            margin-right: 0; 
+            padding: 6px 12px; 
+            white-space: nowrap; 
+            border-radius: 6px; 
+            transition: all 0.2s ease; 
+        }
+        
+        /* Contenedor del menú de opciones de cada item */
+        .item-menu-container { 
+            position: relative; 
+            display: inline-block; 
+            z-index: 1000000; 
+            margin-left: auto; 
+            overflow: visible; 
+        }
+        
+        /* Botón que abre el menú de opciones */
+        .item-menu-btn { 
+            background: #e8e8f0; 
+            border: 1px solid #d0d0d8; 
+            font-size: 14px; 
+            padding: 6px 8px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            transition: all 0.2s ease; 
+            color: #666; 
+        }
+        
+        /* Efecto hover para el botón del menú */
+        .item-menu-btn:hover { 
+            background: #d8d8e8; 
+            border-color: #b8b8c8; 
+            transform: translateY(-1px); 
+        }
+        
+        /* Menú desplegable de opciones para cada item */
+        .inline-menu { 
+            display: none; 
+            background: white; 
+            border-radius: 8px; 
+            padding: 8px; 
+            border: 1px solid #d0d0d8; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+            position: absolute; 
+            right: 0; 
+            top: 50%; 
+            transform: translateY(-50%); 
+            z-index: 999999; 
+            animation: slideIn 0.2s ease; 
+            min-width: 160px; 
+            margin-right: 10px; 
+            margin-top: 5px; 
+        }
+        
+        /* Estado visible del menú desplegable */
+        .inline-menu.show { 
+            display: block; 
+        }
+        
+        /* Contenedor de botones del menú desplegable */
+        .inline-menu-buttons { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 4px; 
+        }
+        
+        /* Estilos para botones dentro del menú desplegable */
+        .inline-btn { 
+            display: flex; 
+            align-items: center; 
+            gap: 6px; 
+            padding: 8px 12px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 13px; 
+            transition: all 0.2s ease; 
+            background: white; 
+            color: #555; 
+            width: 100%; 
+            text-align: left; 
+        }
+        
+        /* Efecto hover para botones del menú */
+        .inline-btn:hover { 
+            background: #f8f8f8; 
+            transform: translateX(2px); 
+        }
+        
+        /* Estilos para botones de peligro (eliminar) */
+        .inline-btn.danger { 
+            color: #dc2626; 
+        }
+        .inline-btn.danger:hover { 
+            background: #fef2f2; 
+            color: #b91c1c; 
+        }
+        
+        /* Animación de entrada del menú desplegable */
+        @keyframes slideIn { 
+            from { 
+                opacity: 0; 
+                transform: translateY(-50%) translateX(10px); 
+            } 
+            to { 
+                opacity: 1; 
+                transform: translateY(-50%) translateX(0); 
+            } 
+        }
+        
+        /* Título principal de la aplicación */
+        h1 { 
+            color: #6b5b3d; 
+            text-align: center; 
+            margin: 0; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 20px; 
+        }
+        
+        /* Contenedor del menú principal */
+        .menu-container { 
+            position: relative; 
+            display: inline-block; 
+            z-index: 10000004; 
+        }
+        
+        /* Botón del menú principal */
+        .menu-btn { 
+            background: none; 
+            border: none; 
+            font-size: 24px; 
+            cursor: pointer; 
+            padding: 8px; 
+            border-radius: 50%; 
+            transition: background-color 0.3s; 
+            color: #6b5b3d; 
+            position: relative; 
+            z-index: 10000005; 
+        }
+        
+        /* Efecto hover para el botón del menú principal */
+        .menu-btn:hover { 
+            background-color: rgba(107, 91, 61, 0.1); 
+        }
+        
+        /* Menú desplegable principal */
+        .dropdown-menu { 
+            position: absolute; 
+            top: 100%; 
+            right: 0; 
+            background: white; 
+            border: 1px solid #d4c4a8; 
+            border-radius: 8px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+            z-index: 10000003; 
+            min-width: 200px; 
+            display: none; 
+            margin-top: 10px; 
+            margin-right: 10px; 
+        }
+        
+        /* Estado visible del menú principal */
+        .dropdown-menu.show { 
+            display: block; 
+        }
+        
+        /* Items del menú principal */
+        .dropdown-item { 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+            padding: 8px 12px; 
+            cursor: pointer; 
+            border-bottom: 1px solid #f0f0f0; 
+            transition: all 0.2s ease; 
+            color: #666; 
+            font-size: 14px; 
+        }
+        
+        /* Último item del menú sin borde inferior */
+        .dropdown-item:last-child { 
+            border-bottom: none; 
+        }
+        
+        /* Efecto hover para items del menú principal */
+        .dropdown-item:hover { 
+            background: #f5f5f5; 
+            color: #333; 
+        }
+        
+        /* Estilos para items de peligro en el menú principal */
+        .dropdown-item.danger { 
+            color: #e74c3c; 
+            font-size: 13px; 
+        }
+        .dropdown-item.danger:hover { 
+            background: #fdf2f2; 
+            color: #c0392b; 
+        }
+        
+        /* Iconos en los items del menú */
+        .dropdown-item .icon { 
+            font-size: 14px; 
+            width: 16px; 
+            text-align: center; 
+        }
+        
+        /* Contenedor para la edición inline de nombres */
+        .edit-container { 
+            display: flex; 
+            align-items: center; 
+            gap: 5px; 
+            width: 100%; 
+        }
+        
+        /* Input para editar nombres */
+        .edit-input { 
+            background: white; 
+            border: 2px solid #007bff; 
+            border-radius: 4px; 
+            padding: 4px 8px; 
+            font-size: 14px; 
+            flex: 1; 
+            min-width: 0; 
+        }
+        
+        /* Botones de edición (guardar/cancelar) */
+        .edit-btn { 
+            width: 24px; 
+            height: 24px; 
+            border: none; 
+            border-radius: 3px; 
+            cursor: pointer; 
+            font-size: 12px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+        }
+        
+        /* Botón de guardar (verde) */
+        .save-btn { 
+            background: #28a745; 
+            color: white; 
+        }
+        
+        /* Botón de cancelar (rojo) */
+        .cancel-btn { 
+            background: #dc3545; 
+            color: white; 
+        }
+    </style>
+</head>
+<body>
+    <!-- Encabezado principal con título y menú de opciones -->
+    <h1>Lista de Compras
+        <div class="menu-container">
+            <!-- Botón que abre el menú principal -->
+            <button class="menu-btn" onclick="toggleMenu()" title="Opciones">⋮</button>
+            <!-- Menú desplegable con opciones globales -->
+            <div class="dropdown-menu" id="dropdownMenu">
+                <div class="dropdown-item danger" onclick="clearAllItems()">
+                    <span class="icon">🗑</span> Limpiar lista
+                </div>
+            </div>
+        </div>
+    </h1>
+    
+    <!-- Formulario para agregar nuevos productos -->
+    <div class="add-item">
+        <!-- Input para escribir el nombre del producto -->
+        <input type="text" id="newItem" placeholder="Agregar producto...">
+        <!-- Input oculto para seleccionar fotos -->
+        <input type="file" id="itemPhoto" accept="image/*" style="display: none;">
+        <!-- Botón para seleccionar foto -->
+        <button type="button" onclick="selectPhoto()" class="photo-btn" id="photoBtn">📷 Foto</button>
+        <!-- Botón para agregar el producto -->
+        <button onclick="addItem()">Agregar</button>
+    </div>
+    
+    <!-- Lista donde se renderizan todos los productos -->
+    <ul id="shoppingList" class="shopping-list"></ul>
+
+    <script>
+        // ========================================
+        // VARIABLES GLOBALES Y CONFIGURACIÓN
+        // ========================================
+        
+        // Array que contiene todos los productos de la lista
+        let items = [];
+        
+        // Variable para el debounce del renderizado (evita renders múltiples)
+        let renderTimeout;
+        
+        // Variables para el sistema de drag & drop
+        let draggedItem = null;    // Elemento que se está arrastrando
+        let draggedIndex = null;   // Índice del elemento que se está arrastrando
+        
+        // ========================================
+        // CARGA INICIAL DE DATOS
+        // ========================================
+        
+        // Cargar datos del localStorage con validación robusta
+        try {
+            const stored = localStorage.getItem('shoppingList');
+            if (stored && (stored = JSON.parse(stored), Array.isArray(stored) && stored.every(item => 
+                typeof item === 'object' && typeof item.text === 'string' && typeof item.completed === 'boolean'))) {
+                items = stored;
+            }
+        } catch (e) { 
+            console.error('Error al cargar datos:', e); 
+        }
+
+        // ========================================
+        // FUNCIONES DE UTILIDAD
+        // ========================================
+        
+        /**
+         * Cierra el menú desplegable de un item específico
+         * @param {number} index - Índice del item
+         */
+        const closeMenu = (index) => {
+            const menu = document.getElementById(`inlineMenu-${index}`);
+            const itemElement = menu?.closest('.item');
+            menu?.classList.remove('show');
+            itemElement && !itemElement.classList.contains('has-image') && itemElement.classList.remove('menu-expanded');
+        };
+
+        /**
+         * Valida un archivo de imagen antes de procesarlo
+         * @param {File} file - Archivo a validar
+         * @returns {string|null} - Mensaje de error o null si es válido
+         */
+        const validateFile = (file) => {
+            if (file.size > 5 * 1024 * 1024) return 'La imagen es demasiado grande. Máximo 5MB permitido.';
+            if (!file.type.startsWith('image/')) return 'Por favor selecciona un archivo de imagen válido.';
+            return null;
+        };
+
+        /**
+         * Guarda los datos actuales en localStorage
+         */
+        const saveData = () => localStorage.setItem('shoppingList', JSON.stringify(items));
+
+        // ========================================
+        // FUNCIONES PRINCIPALES DE LA APLICACIÓN
+        // ========================================
+        
+        /**
+         * Renderiza toda la lista de productos en el DOM
+         * Utiliza debounce para evitar múltiples renders innecesarios
+         */
+        function renderList() {
+            // Cancelar render anterior si existe
+            if (renderTimeout) clearTimeout(renderTimeout);
+            
+            // Programar nuevo render con debounce de 10ms
+            renderTimeout = setTimeout(() => {
+                const list = document.getElementById('shoppingList');
+                list.innerHTML = '';
+                
+                // Crear elemento HTML para cada producto
+                items.forEach((item, index) => {
+                    const li = document.createElement('li');
+                    li.className = `item ${item.completed ? 'completed' : ''} ${item.photo ? 'has-image' : ''}`;
+                    
+                    // HTML interno del producto con todos sus elementos
+                    li.innerHTML = `
+                        <div class="drag-handle ${item.photo ? 'with-image' : ''}" draggable="true" onmousedown="startDrag(event, ${index})"></div>
+                        <div class="item-content">
+                            <div class="item-main-row">
+                                <input type="checkbox" ${item.completed ? 'checked' : ''} onchange="toggleItem(${index})">
+                                ${item.photo ? `<img src="${item.photo}" alt="Foto del producto" class="item-photo">` : ''}
+                                <span class="item-text" id="item-text-${index}">${item.text}</span>
+                                <div class="item-menu-container">
+                                    <button class="item-menu-btn" onclick="toggleInlineMenu(${index})" title="Más opciones">⋮</button>
+                                </div>
+                            </div>
+                            <div class="inline-menu" id="inlineMenu-${index}">
+                                <div class="inline-menu-buttons">
+                                    <button class="inline-btn" onclick="editItemName(${index})" title="Editar nombre">✏️ Editar nombre</button>
+                                    <button class="inline-btn" onclick="editPhoto(${index})" title="${item.photo ? 'Editar foto' : 'Agregar foto'}">📷 ${item.photo ? 'Editar foto' : 'Agregar foto'}</button>
+                                    <button class="inline-btn danger" onclick="deleteItem(${index})" title="Eliminar">🗑 Eliminar</button>
+                                </div>
+                            </div>
+                        </div>`;
+                    list.appendChild(li);
+                });
+                
+                // Guardar datos después de renderizar
+                saveData();
+            }, 10);
+        }
+
+        /**
+         * Abre el selector de archivos para agregar una foto
+         */
+        function selectPhoto() {
+            const photoInput = document.getElementById('itemPhoto');
+            photoInput.click();
+            photoInput.onchange = updatePhotoButton;
+        }
+
+        /**
+         * Actualiza la apariencia del botón de foto según si hay archivo seleccionado
+         */
+        function updatePhotoButton() {
+            const photoInput = document.getElementById('itemPhoto');
+            const photoBtn = document.getElementById('photoBtn');
+            
+            if (photoInput.files?.[0]) {
+                // Foto seleccionada - mostrar tick verde
+                photoBtn.innerHTML = '✓ Foto';
+                photoBtn.style.backgroundColor = '#28a745';
+                photoBtn.title = 'Foto seleccionada';
+            } else {
+                // Sin foto - mostrar icono de cámara
+                photoBtn.innerHTML = '📷 Foto';
+                photoBtn.style.backgroundColor = '#a8d4a8';
+                photoBtn.title = 'Seleccionar foto';
+            }
+        }
+
+        /**
+         * Agrega un nuevo producto a la lista
+         * Maneja tanto productos con foto como sin foto
+         */
+        function addItem() {
+            const input = document.getElementById('newItem');
+            const photoInput = document.getElementById('itemPhoto');
+            const text = input.value.trim();
+            
+            // Validar que hay texto
+            if (!text) return;
+
+            const item = { text, completed: false, photo: null };
+            
+            // Si hay una foto seleccionada, procesarla
+            if (photoInput.files?.[0]) {
+                const file = photoInput.files[0];
+                
+                // Validar el archivo
+                const error = validateFile(file);
+                if (error) { 
+                    alert(error); 
+                    return; 
+                }
+                
+                // Convertir archivo a base64 para almacenamiento
+                const reader = new FileReader();
+                reader.onload = e => {
+                    item.photo = e.target.result;
+                    items.push(item);
+                    input.value = '';
+                    photoInput.value = '';
+                    updatePhotoButton();
+                    renderList();
+                };
+                reader.readAsDataURL(file);
+            } else {
+                // Agregar producto sin foto
+                items.push(item);
+                input.value = '';
+                photoInput.value = '';
+                updatePhotoButton();
+                renderList();
+            }
+        }
+
+        /**
+         * Alterna el estado de completado de un producto
+         * @param {number} index - Índice del producto
+         */
+        function toggleItem(index) {
+            items[index].completed = !items[index].completed;
+            renderList();
+        }
+
+        /**
+         * Abre/cierra el menú de opciones de un producto específico
+         * @param {number} index - Índice del producto
+         */
+        function toggleInlineMenu(index) {
+            const menu = document.getElementById(`inlineMenu-${index}`);
+            const itemElement = menu.closest('.item');
+            
+            // Cerrar otros menús abiertos
+            document.querySelectorAll('.inline-menu.show').forEach(otherMenu => {
+                if (otherMenu !== menu) {
+                    otherMenu.classList.remove('show');
+                    const otherItem = otherMenu.closest('.item');
+                    if (otherItem && !otherItem.classList.contains('has-image')) {
+                        otherItem.classList.remove('menu-expanded');
+                    }
+                }
+            });
+            
+            // Alternar el menú actual
+            if (menu.classList.contains('show')) {
+                menu.classList.remove('show');
+                if (!itemElement.classList.contains('has-image')) {
+                    itemElement.classList.remove('menu-expanded');
+                }
+            } else {
+                // Abrir menú y ajustar z-index
+                itemElement.style.zIndex = '1000001';
+                itemElement.style.position = 'relative';
+                menu.style.zIndex = '1000002';
+                menu.classList.add('show');
+                if (!itemElement.classList.contains('has-image')) {
+                    itemElement.classList.add('menu-expanded');
+                }
+            }
+        }
+
+        /**
+         * Elimina un producto de la lista con confirmación
+         * @param {number} index - Índice del producto a eliminar
+         */
+        function deleteItem(index) {
+            if (confirm('¿Estás seguro de que quieres eliminar este producto?')) {
+                items.splice(index, 1);
+                renderList();
+            } else {
+                // Si cancela, cerrar el menú
+                closeMenu(index);
+            }
+        }
+
+        /**
+         * Abre/cierra el menú principal de la aplicación
+         */
+        function toggleMenu() {
+            document.getElementById('dropdownMenu').classList.toggle('show');
+        }
+
+        /**
+         * Elimina todos los productos de la lista con confirmación doble
+         */
+        function clearAllItems() {
+            if (items.length === 0) {
+                alert('La lista ya está vacía');
+                return;
+            }
+            
+            if (confirm('¿Estás seguro de que quieres eliminar todos los productos de la lista?')) {
+                items = [];
+                renderList();
+                alert('Lista eliminada completamente');
+            }
+            
+            // Cerrar menú después de la acción
+            document.getElementById('dropdownMenu').classList.remove('show');
+        }
+
+        // ========================================
+        // FUNCIONES DE EDICIÓN DE NOMBRES
+        // ========================================
+        
+        /**
+         * Inicia la edición del nombre de un producto
+         * @param {number} index - Índice del producto a editar
+         */
+        function editItemName(index) {
+            // Cerrar menú automáticamente
+            closeMenu(index);
+            
+            const itemTextElement = document.getElementById(`item-text-${index}`);
+            const currentText = items[index].text;
+            
+            // Crear interfaz de edición inline
+            const editContainer = document.createElement('div');
+            editContainer.className = 'edit-container';
+            editContainer.innerHTML = `
+                <input type="text" class="edit-input" value="${currentText}" maxlength="100">
+                <button class="edit-btn save-btn" onclick="saveItemName(${index})">✓</button>
+                <button class="edit-btn cancel-btn" onclick="cancelEditName(${index})">✗</button>
+            `;
+            
+            // Reemplazar texto con interfaz de edición
+            itemTextElement.innerHTML = '';
+            itemTextElement.appendChild(editContainer);
+            
+            // Enfocar y seleccionar texto
+            const editInput = editContainer.querySelector('.edit-input');
+            editInput.focus();
+            editInput.select();
+            
+            // Event listeners para teclas especiales
+            editInput.addEventListener('keypress', e => {
+                if (e.key === 'Enter') saveItemName(index);
+                else if (e.key === 'Escape') cancelEditName(index);
+            });
+        }
+
+        /**
+         * Guarda el nombre editado de un producto
+         * @param {number} index - Índice del producto
+         */
+        function saveItemName(index) {
+            const itemTextElement = document.getElementById(`item-text-${index}`);
+            const editInput = itemTextElement.querySelector('.edit-input');
+            const newText = editInput.value.trim();
+            
+            // Solo actualizar si hay cambios
+            if (newText && newText !== items[index].text) {
+                items[index].text = newText;
+                saveData();
+            }
+            
+            // Restaurar vista normal
+            itemTextElement.textContent = items[index].text;
+            closeMenu(index);
+        }
+
+        /**
+         * Cancela la edición y restaura el nombre original
+         * @param {number} index - Índice del producto
+         */
+        function cancelEditName(index) {
+            const itemTextElement = document.getElementById(`item-text-${index}`);
+            itemTextElement.textContent = items[index].text;
+            closeMenu(index);
+        }
+
+        /**
+         * Permite editar/agregar foto a un producto existente
+         * @param {number} index - Índice del producto
+         */
+        function editPhoto(index) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (file) {
+                    // Validar archivo
+                    const error = validateFile(file);
+                    if (error) { 
+                        alert(error); 
+                        closeMenu(index); 
+                        return; 
+                    }
+                    
+                    // Convertir a base64 y actualizar
+                    const reader = new FileReader();
+                    reader.onload = event => {
+                        items[index].photo = event.target.result;
+                        renderList();
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    // Si cancela, cerrar menú
+                    closeMenu(index);
+                }
+            };
+            input.click();
+        }
+
+        // ========================================
+        // SISTEMA DE DRAG & DROP
+        // ========================================
+        
+        /**
+         * Inicia el arrastre de un producto
+         * @param {Event} event - Evento de mouse
+         * @param {number} index - Índice del producto a arrastrar
+         */
+        function startDrag(event, index) {
+            draggedItem = event.target.closest('.item');
+            draggedIndex = index;
+            draggedItem.classList.add('dragging');
+            createDropZones();
+        }
+
+        /**
+         * Crea las zonas de drop para el drag & drop
+         */
+        function createDropZones() {
+            const list = document.getElementById('shoppingList');
+            const items = list.querySelectorAll('.item');
+            
+            // Limpiar zonas existentes
+            document.querySelectorAll('.drop-zone').forEach(zone => zone.remove());
+            
+            // Crear zona antes de cada item
+            items.forEach((item, index) => {
+                if (item.classList.contains('dragging')) return;
+                
+                const dropZone = document.createElement('div');
+                dropZone.className = 'drop-zone';
+                dropZone.dataset.index = index;
+                
+                // Agregar event listeners para drag & drop
+                ['dragover', 'dragleave', 'drop'].forEach(event => {
+                    dropZone.addEventListener(event, window[`handle${event.charAt(0).toUpperCase() + event.slice(1)}`]);
+                });
+                
+                item.parentNode.insertBefore(dropZone, item);
+            });
+            
+            // Crear zona al final de la lista
+            const finalDropZone = document.createElement('div');
+            finalDropZone.className = 'drop-zone';
+            finalDropZone.dataset.index = items.length;
+            ['dragover', 'dragleave', 'drop'].forEach(event => {
+                finalDropZone.addEventListener(event, window[`handle${event.charAt(0).toUpperCase() + event.slice(1)}`]);
+            });
+            list.appendChild(finalDropZone);
+        }
+
+        /**
+         * Maneja el evento dragover (cuando se arrastra sobre una zona)
+         * @param {Event} event - Evento de drag
+         */
+        function handleDragover(event) { 
+            event.preventDefault(); 
+            event.target.classList.add('drag-over'); 
+        }
+        
+        /**
+         * Maneja el evento dragleave (cuando se sale de una zona)
+         * @param {Event} event - Evento de drag
+         */
+        function handleDragleave(event) { 
+            event.target.classList.remove('drag-over'); 
+        }
+        
+        /**
+         * Maneja el evento drop (cuando se suelta un elemento)
+         * @param {Event} event - Evento de drop
+         */
+        function handleDrop(event) {
+            event.preventDefault();
+            event.target.classList.remove('drag-over');
+            
+            const dropIndex = parseInt(event.target.dataset.index);
+            
+            // Validar que el drop es válido
+            if (draggedIndex !== null && dropIndex !== draggedIndex && 
+                dropIndex >= 0 && dropIndex <= items.length) {
+                moveItem(draggedIndex, dropIndex);
+            }
+            cleanupDrag();
+        }
+
+        /**
+         * Mueve un producto de una posición a otra
+         * @param {number} fromIndex - Posición origen
+         * @param {number} toIndex - Posición destino
+         */
+        function moveItem(fromIndex, toIndex) {
+            // Ajustar índice si se mueve hacia abajo
+            if (toIndex > fromIndex) toIndex--;
+            
+            // Mover elemento en el array
+            const item = items.splice(fromIndex, 1)[0];
+            items.splice(toIndex, 0, item);
+            
+            // Guardar y renderizar
+            saveData();
+            renderList();
+        }
+
+        /**
+         * Limpia el estado del drag & drop
+         */
+        function cleanupDrag() {
+            if (draggedItem) {
+                draggedItem.classList.remove('dragging');
+                draggedItem = null;
+                draggedIndex = null;
+            }
+            // Limpiar todas las zonas de drop
+            document.querySelectorAll('.drop-zone').forEach(zone => zone.remove());
+        }
+
+        // ========================================
+        // EVENT LISTENERS GLOBALES
+        // ========================================
+        
+        // Event listener para cerrar menús al hacer click fuera
+        document.addEventListener('click', event => {
+            const menu = document.getElementById('dropdownMenu');
+            const menuBtn = document.querySelector('.menu-btn');
+            
+            // Cerrar menú principal si se hace click fuera
+            if (!menu.contains(event.target) && !menuBtn.contains(event.target)) {
+                menu.classList.remove('show');
+            }
+            
+            // Cerrar menús inline de productos
+            document.querySelectorAll('.inline-menu').forEach(menu => {
+                if (!menu.contains(event.target)) {
+                    const menuBtn = document.querySelector(`[onclick="toggleInlineMenu(${menu.id.split('-')[1]})"]`);
+                    if (!menuBtn || !menuBtn.contains(event.target)) {
+                        menu.classList.remove('show');
+                        const itemElement = menu.closest('.item');
+                        if (itemElement && !itemElement.classList.contains('has-image')) {
+                            itemElement.classList.remove('menu-expanded');
+                        }
+                    }
+                }
+            });
+        });
+
+        // Event listener para mantener el drag activo
+        document.addEventListener('mousemove', event => {
+            if (draggedItem && event.buttons === 1) { 
+                /* Mantener arrastre activo */ 
+            }
+        });
+
+        // Event listener para limpiar drag al soltar mouse
+        document.addEventListener('mouseup', event => {
+            if (draggedItem) cleanupDrag();
+        });
+
+        // ========================================
+        // SISTEMA DE DETECCIÓN OFFLINE
+        // ========================================
+        
+        /**
+         * Actualiza el estado de conexión y muestra notificaciones
+         */
+        function updateOnlineStatus() {
+            console.log('Estado de conexión:', navigator.onLine ? 'online' : 'offline');
+            
+            if (!navigator.onLine) {
+                showOfflineNotification();
+            } else {
+                hideOfflineNotification();
+            }
+        }
+
+        /**
+         * Muestra notificación de estado offline
+         */
+        function showOfflineNotification() {
+            let notification = document.getElementById('offline-notification');
+            if (!notification) {
+                notification = document.createElement('div');
+                notification.id = 'offline-notification';
+                notification.innerHTML = `
+                    <div style="position: fixed; top: 0; left: 0; right: 0; background: #ff6b6b; color: white; text-align: center; padding: 10px; z-index: 1000; font-weight: bold;">
+                        📱 Sin conexión - Trabajando en modo offline
+                    </div>`;
+                document.body.appendChild(notification);
+            }
+        }
+
+        /**
+         * Oculta la notificación offline
+         */
+        function hideOfflineNotification() {
+            const notification = document.getElementById('offline-notification');
+            if (notification) notification.remove();
+        }
+
+        // ========================================
+        // INICIALIZACIÓN DE LA APLICACIÓN
+        // ========================================
+        
+        // Renderizar lista inicial
+        renderList();
+        
+        // Registrar Service Worker para funcionalidad offline
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(registration => {
+                    console.log('Service Worker registrado:', registration);
+                    
+                    // Detectar actualizaciones del service worker
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                // Preguntar al usuario si quiere actualizar
+                                if (confirm('Hay una nueva versión disponible. ¿Deseas actualizar?')) {
+                                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                    window.location.reload();
+                                }
+                            }
+                        });
+                    });
+                })
+                .catch(error => console.error('Error al registrar Service Worker:', error));
+            
+            // Escuchar mensajes del service worker
+            navigator.serviceWorker.addEventListener('message', event => {
+                if (event.data.type === 'SW_UPDATED') {
+                    console.log('Service Worker actualizado');
+                }
+            });
+        }
+
+        // Event listeners para cambios de estado de conexión
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        
+        // Verificar estado inicial de conexión
+        updateOnlineStatus();
+    </script>
+</body>
+</html>
